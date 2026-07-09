@@ -1,0 +1,122 @@
+;
+; @file i2c.pio
+; @brief I2C Master Bit-Bang State Machine for RP2040 PIO (31 instructions).
+;
+; Part of WirePIO — TwoWire-compatible I2C using PIO+DMA.
+; Ported directly from BMx280PIO_RP2040, verified on hardware.
+;
+; Pin mapping:
+;   OUT pin 0       = SDA direction (1 = drive low, 0 = release/Hi-Z)
+;   Side-set pin 0  = SCL level (0 = low, 1 = high)
+;   SET pin 0       = SDA direction (set pindirs for START/ACK)
+;   IN pin 0        = SDA input (read data and ACK bits)
+;
+; Command word (16-bit, LSB-first shift from OSR):
+;   Bit  0    = START flag  (1 = generate START before this byte)
+;   Bit  1    = READ flag   (1 = read from slave, 0 = write)
+;   Bits 9:2  = Data byte for WRITE (~rev8(data))
+;   Bit  10   = STOP flag   (1 = generate STOP after this byte)
+;
+; Key design decisions:
+; - Flags extracted via out y/x BEFORE any SCL edge (zero glitch for START=0)
+; - START generated conditionally with set pindirs + set pindirs,0 cleanup
+; - ACK pulse after each read byte (SDA setup before SCL rise, 3 instructions)
+; - ACK read removed from WRITE path (ISR stays clean for next command)
+;
+; @author angeloINTJ
+; @license MIT
+
+.program i2c_master
+.side_set 1 opt
+
+    ; ─── Prologue: extract flags, then conditionally generate START ────
+    pull block          side 0     ; 0: wait for command, SCL LOW
+
+    out y, 1            side 0     ; 1: Y = START (OSR bit 0)
+    out x, 1            side 0     ; 2: X = READ  (OSR bit 1)
+
+    jmp !y, branch      side 0     ; 3: START=0 → branch
+
+    ; Generate START: SDA LOW while SCL HIGH
+    set pindirs, 1      side 1     ; 4: SCL↑ + SET drives SDA↓ = START
+    set pindirs, 0      side 0 [1] ; 5: release SET, SCL↓
+
+    ; ─── Branch on READ flag ───────────────────────────────────────────
+branch:
+    jmp !x, write_byte  side 0     ; 6: READ=0 → write
+
+    ; ===================================================================
+    ; READ BYTE + ACK (9th SCL pulse)
+    ; ===================================================================
+read_byte:
+    out pindirs, 1      side 0     ; 7: release SDA (consumes bit 2)
+    set x, 7            side 0     ; 8: loop counter
+read_bit:
+    nop                 side 1 [1] ; 9: SCL HIGH
+    in pins, 1          side 1     ;10: sample SDA → ISR (autopush at 8)
+    nop                 side 0 [7] ;11: SCL LOW
+    jmp x--, read_bit   side 0     ;12: loop 8 times
+    ; Send ACK (SDA LOW during 9th SCL) — setup SDA before SCL rises
+    set pindirs, 1      side 0     ;13: drive SDA LOW, SCL stays LOW (setup)
+    nop                 side 1 [1] ;14: SCL HIGH (ACK clock — sensor samples SDA=0)
+    set pindirs, 0      side 0 [1] ;15: release SDA, SCL LOW
+    jmp check_stop      side 0     ;16:
+
+    ; ===================================================================
+    ; WRITE BYTE + ACK check (9th SCL — value not read, ISR clean)
+    ; ===================================================================
+write_byte:
+    set x, 7            side 0     ;16: loop counter
+write_bit:
+    out pindirs, 1      side 0 [1] ;17: data bit → SDA
+    nop                 side 1 [1] ;18: SCL HIGH
+    nop                 side 0 [7] ;19: SCL LOW
+    jmp x--, write_bit  side 0     ;20: loop 8 times
+    ; ACK clock pulse (sensor needs 9th SCL, value not read)
+    out pindirs, 1      side 0 [1] ;21: release SDA
+    nop                 side 1 [1] ;22: SCL HIGH (9th pulse)
+    nop                 side 0 [7] ;23: SCL LOW (ISR stays clean!)
+
+    ; ===================================================================
+    ; CHECK STOP / GENERATE STOP
+    ; ===================================================================
+check_stop:
+    out y, 1            side 0     ;24: Y = STOP flag
+    jmp !y, done        side 0     ;25: no STOP → done
+    ; STOP: SDA LOW → SCL HIGH → SDA HIGH
+    set pindirs, 1      side 0 [1] ;26: drive SDA LOW
+    nop                 side 1 [1] ;27: SCL HIGH
+    set pindirs, 0      side 1 [1] ;28: release SDA while SCL HIGH = STOP
+
+done:
+    nop                 side 0 [7] ;29: SCL LOW between commands
+.wrap
+
+% c-sdk {
+
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+
+static inline void i2c_master_program_init(PIO pio, uint sm, uint offset,
+                                            uint pin_sda, uint pin_scl,
+                                            uint32_t freq) {
+    pio_sm_config c = i2c_master_program_get_default_config(offset);
+
+    sm_config_set_out_pins(&c, pin_sda, 1);
+    sm_config_set_set_pins(&c, pin_sda, 1);
+    sm_config_set_in_pins(&c, pin_sda);
+    sm_config_set_sideset_pins(&c, pin_scl);
+    sm_config_set_in_shift(&c, false, true, 8);
+
+    float div = (float)clock_get_hz(clk_sys) / ((float)freq * 13.0f);
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_pindirs_with_mask(pio, sm,
+        (1u << pin_scl),
+        (1u << pin_sda) | (1u << pin_scl));
+
+    gpio_pull_up(pin_sda);
+}
+
+%}

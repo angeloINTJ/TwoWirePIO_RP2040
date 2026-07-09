@@ -1,0 +1,40 @@
+{
+  "name": "WirePIO",
+  "version": "1.0.0",
+  "description": "TwoWire-compatible I2C implementation using PIO+DMA on the RP2040. Create unlimited I2C buses on any GPIO pin pair — no multiplexers needed. Drop-in replacement for Wire.h.",
+  "keywords": [
+    "I2C",
+    "TwoWire",
+    "Wire",
+    "PIO",
+    "DMA",
+    "RP2040",
+    "Raspberry Pi Pico",
+    "communication",
+    "bus",
+    "PlatformIO"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/angeloINTJ/TwoWirePIO_RP2040.git"
+  },
+  "authors": [
+    {
+      "name": "Angelo Moises Alves",
+      "url": "https://github.com/angeloINTJ",
+      "maintainer": "Angelo Moises Alves"
+    }
+  ],
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": "raspberrypi",
+  "headers": [
+    "WirePIO.h",
+    "WirePIOTransport.h",
+    "WirePIOSlave.h",
+    "WirePIO_config.h"
+  ],
+  "dependencies": {
+    "earlephilhower/arduino-pico": "^4.0.0"
+  }
+}

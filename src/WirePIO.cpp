@@ -32,8 +32,8 @@
 // CONSTRUCTION / DESTRUCTION
 // =========================================================================
 
-WirePIO::WirePIO(pin_size_t sda, pin_size_t scl, uint32_t freq)
-    : _sda(sda), _scl(scl), _freq(freq), _running(false), _slave(false),
+WirePIO::WirePIO(pin_size_t sda, pin_size_t scl, uint32_t freq, PIO pio)
+    : _sda(sda), _scl(scl), _freq(freq), _pioBlock(pio), _running(false), _slave(false),
       _addr(0), _txBegun(false),
       _buff(nullptr), _buffSize(WIREPIO_BUFFER_SIZE), _buffLen(0), _buffOff(0),
       _transport(nullptr), _slaveHandler(nullptr),
@@ -69,6 +69,12 @@ bool WirePIO::setSCL(pin_size_t scl) {
     return true;
 }
 
+bool WirePIO::setPIO(PIO pio) {
+    if (_running) return false;
+    _pioBlock = pio;
+    return true;
+}
+
 // =========================================================================
 // LIFECYCLE
 // =========================================================================
@@ -82,13 +88,18 @@ void WirePIO::begin() {
 
     if (!_transport->beginGPIO()) return;
 
-    // Load PIO program and claim DMA channels
-    if (!_transport->beginPIO(pio0)) {
+    // Load PIO program and claim DMA channels on configured PIO block
+    if (!_transport->beginPIO(_pioBlock)) {
         // PIO failed — GPIO bit-bang fallback still works
     }
 
     _slave = false;
     _running = true;
+}
+
+void WirePIO::begin(PIO pio) {
+    setPIO(pio);
+    begin();
 }
 
 void WirePIO::begin(uint8_t address) {

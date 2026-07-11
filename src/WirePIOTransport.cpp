@@ -239,16 +239,28 @@ int WirePIOTransport::scan() {
 // PIO+DMA LIFECYCLE
 // =========================================================================
 
+// Static cache: offset of the i2c_master program in each PIO block.
+// The earlephilhower PIO allocator doesn't detect duplicate programs,
+// so the first instance loads normally and caches the offset; subsequent
+// instances reuse it instead of failing on PICO_ERROR_INSUFFICIENT_RESOURCES.
+static int _shared_i2c_offset_wp[2] = {-1, -1};
+
 bool WirePIOTransport::beginPIO(PIO pio) {
     if (_pioReady) return true;
     if (!_gpioReady) return false;
 
     _pio = pio;
+    uint pio_idx = pio_get_index(_pio);
 
-    // Load PIO program
-    if (!pio_can_add_program(_pio, &i2c_master_program)) return false;
-    _offset = pio_add_program(_pio, &i2c_master_program);
-    if (_offset < 0) return false;
+    if (_shared_i2c_offset_wp[pio_idx] >= 0) {
+        // Program already loaded by another instance — reuse its offset
+        _offset = _shared_i2c_offset_wp[pio_idx];
+    } else {
+        // First instance on this PIO block — load the program normally
+        _offset = pio_add_program(_pio, &i2c_master_program);
+        if (_offset < 0) return false;
+        _shared_i2c_offset_wp[pio_idx] = _offset;
+    }
 
     // Claim a state machine
     int sm = pio_claim_unused_sm(_pio, false);

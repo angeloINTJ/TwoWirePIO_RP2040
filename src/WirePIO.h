@@ -69,8 +69,10 @@ public:
      * @param sda  GPIO pin for SDA (open-drain, external pull-up required).
      * @param scl  GPIO pin for SCL (driven by PIO/side-set, push-pull).
      * @param freq Bus frequency in Hz (default 100 kHz).
+     * @param pio  PIO block to use (pio0 or pio1, default pio0).
      */
-    WirePIO(pin_size_t sda, pin_size_t scl, uint32_t freq = WIREPIO_DEFAULT_FREQ);
+    WirePIO(pin_size_t sda, pin_size_t scl, uint32_t freq = WIREPIO_DEFAULT_FREQ,
+            PIO pio = pio0);
     ~WirePIO();
 
     // ─── Pin Configuration (call before begin()) ─────────────────────
@@ -87,6 +89,18 @@ public:
      */
     bool setSCL(pin_size_t scl);
 
+    /**
+     * @brief Set the PIO block to use for I2C master mode.
+     *
+     * Must be called before begin(). Use this to avoid resource conflicts
+     * with other PIO-based libraries (e.g., pio1 when WiFi is using pio0
+     * on a Pico W, or when BMx280PIO_RP2040 occupies the other block).
+     *
+     * @param pio PIO instance (pio0 or pio1). Default is pio0.
+     * @return true if the PIO block can be changed (bus not running).
+     */
+    bool setPIO(PIO pio);
+
     // ─── Lifecycle ────────────────────────────────────────────────────
 
     /**
@@ -95,12 +109,25 @@ public:
      * Initializes GPIO, loads the PIO program, claims a state machine
      * and 2 DMA channels. After this call, the bus is ready for
      * beginTransmission() and requestFrom().
+     *
+     * Uses the PIO block configured via setPIO() or the constructor
+     * (default: pio0).
      */
 #ifdef WIREPIO_PLATFORM_ARDUINO
     void begin() override;
 #else
     void begin();
 #endif
+
+    /**
+     * @brief Initialize the bus as I2C master on a specific PIO block.
+     *
+     * Overload that sets the PIO block before initializing. Equivalent
+     * to calling setPIO(pio) followed by begin().
+     *
+     * @param pio PIO instance (pio0 or pio1).
+     */
+    void begin(PIO pio);
 
     /**
      * @brief Initialize the bus as I2C slave with the given address.
@@ -357,6 +384,7 @@ public:
 private:
     pin_size_t _sda, _scl;                  ///< GPIO pin numbers.
     uint32_t   _freq;                       ///< Clock frequency.
+    PIO        _pioBlock;                   ///< PIO block for master mode (pio0 or pio1).
     bool       _running;                     ///< Bus initialized (master or slave).
     bool       _slave;                      ///< True if slave mode.
     uint8_t    _addr;                       ///< Target/slave address.

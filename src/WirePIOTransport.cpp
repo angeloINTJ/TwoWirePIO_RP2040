@@ -460,7 +460,8 @@ uint8_t WirePIOTransport::pioWrite(uint8_t addr, const uint8_t *data,
     gpio_set_function(_scl, _pio == pio0 ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
     gpio_pull_up(_sda);
 
-    // ─── Start PIO SM, then enable DMA ────────────────────────────
+    // ─── Start PIO SM, then enable DMA — block interrupts ──────────
+    __asm volatile("cpsid i" ::: "memory");
     pio_sm_clear_fifos(_pio, _sm);
     pio_sm_restart(_pio, _sm);
     pio_sm_set_enabled(_pio, _sm, true);
@@ -470,6 +471,7 @@ uint8_t WirePIOTransport::pioWrite(uint8_t addr, const uint8_t *data,
     // ─── Wait for completion ──────────────────────────────────────
     bool ok = _waitDMADone(WIREPIO_DEFAULT_TIMEOUT_US);
     pio_sm_set_enabled(_pio, _sm, false);
+    __asm volatile("cpsie i" ::: "memory");
 
     // Check for NACK (PIO raises IRQ 0 and halts on unexpected NACK)
     bool nacked = pio_interrupt_get(_pio, _sm);
@@ -598,16 +600,18 @@ size_t WirePIOTransport::burstRead(uint8_t addr, uint8_t reg,
     gpio_set_function(_scl, _pio == pio0 ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
     gpio_pull_up(_sda);
 
-    // Start PIO, then DMA
+    // Start PIO, then DMA — block interrupts for deterministic timing
+    __asm volatile("cpsid i" ::: "memory");
     pio_sm_clear_fifos(_pio, _sm);
     pio_sm_restart(_pio, _sm);
     pio_sm_set_enabled(_pio, _sm, true);
     tx_hw->ctrl_trig |= DMA_CH0_CTRL_TRIG_EN_BITS;
     rx_hw->ctrl_trig |= DMA_CH0_CTRL_TRIG_EN_BITS;
 
-    // Wait
+    // Wait — DMA runs autonomously, CPU just polls
     bool ok = _waitDMADone(WIREPIO_DEFAULT_TIMEOUT_US);
     pio_sm_set_enabled(_pio, _sm, false);
+    __asm volatile("cpsie i" ::: "memory");
 
     bool nacked = pio_interrupt_get(_pio, _sm);
     pio_interrupt_clear(_pio, _sm);

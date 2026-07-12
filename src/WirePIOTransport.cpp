@@ -265,6 +265,7 @@ bool WirePIOTransport::beginPIO(PIO pio) {
     int sm = pio_claim_unused_sm(_pio, false);
     if (sm < 0) {
         pio_remove_program(_pio, &i2c_master_program, _offset);
+        _shared_i2c_offset_wp[pio_idx] = -1;
         _offset = -1;
         return false;
     }
@@ -295,6 +296,7 @@ bool WirePIOTransport::beginPIO(PIO pio) {
         if (_dmaRx >= 0) { dma_channel_unclaim(_dmaRx); _dmaRx = -1; }
         pio_sm_unclaim(_pio, _sm);
         pio_remove_program(_pio, &i2c_master_program, _offset);
+        _shared_i2c_offset_wp[pio_idx] = -1;
         _offset = -1;
         return false;
     }
@@ -321,6 +323,8 @@ void WirePIOTransport::end() {
             pio_sm_set_enabled(_pio, _sm, false);
             pio_sm_unclaim(_pio, _sm);
             pio_remove_program(_pio, &i2c_master_program, _offset);
+            uint pio_idx = pio_get_index(_pio);
+            if (pio_idx < 2) _shared_i2c_offset_wp[pio_idx] = -1;
         }
         _offset = -1;
         _sm = -1;
@@ -350,8 +354,16 @@ void WirePIOTransport::_buildWriteCommands(uint8_t addr, const uint8_t *data,
     for (size_t i = 0; i < len - 1; i++) {
         _cmdBuf[_cmdCount++] = mk_cmd(false, false, false, data[i]);
     }
-    // Last word: data + optional STOP
-    _cmdBuf[_cmdCount++] = mk_cmd(false, false, stop, data[len - 1]);
+    // Last word: data byte. STOP goes at bit 11 for the write path,
+    // because the ACK release (out pindirs,1 at instruction 21) consumes
+    // bit 10. check_stop reads bit 11. If STOP were at bit 10, it would:
+    //   (a) never be seen by check_stop (reads bit 11), AND
+    //   (b) drive SDA as OUTPUT during ACK (bit 10=1 → pindirs=OUT),
+    //       preventing the slave from pulling SDA LOW to ACK.
+    _cmdBuf[_cmdCount++] = mk_cmd(false, false, false, data[len - 1]);
+    if (stop) {
+        _cmdBuf[_cmdCount - 1] |= (1u << 11);
+    }
 }
 
 void WirePIOTransport::_buildReadCommands(uint8_t addr, size_t len, bool stop) {

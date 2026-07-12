@@ -64,6 +64,19 @@ static inline void scl_hi(uint p) { gpio_put(p, 1); }
 // CONSTRUCTION / DESTRUCTION
 // =========================================================================
 
+
+// ─── DMA IRQ infrastructure for zero-jitter _waitDMADone ─────────────────
+static WirePIOTransport* _wpt_irq_inst[12];  // one slot per DMA channel
+
+static void _wpt_dma_handler() {
+    for (int ch = 0; ch < 12; ch++) {
+        if (_wpt_irq_inst[ch] && dma_channel_get_irq0_status(ch)) {
+            dma_channel_acknowledge_irq0(ch);
+            _wpt_irq_inst[ch]->_dmaDone = true;
+        }
+    }
+}
+
 WirePIOTransport::WirePIOTransport(uint8_t sda, uint8_t scl, uint32_t freq)
     : _sda(sda), _scl(scl), _freq(freq), _pio(nullptr), _sm(-1), _offset(-1),
       _gpioReady(false), _pioReady(false), _dmaTx(-1), _dmaRx(-1), _cmdCount(0)
@@ -310,6 +323,7 @@ void WirePIOTransport::end() {
             _dmaTx = -1;
         }
         if (_dmaRx >= 0) {
+            if (_dmaRx < 12) _wpt_irq_inst[_dmaRx] = nullptr;
             dma_channel_abort(_dmaRx);
             dma_channel_unclaim(_dmaRx);
             _dmaRx = -1;
@@ -396,20 +410,50 @@ void WirePIOTransport::_buildWriteThenReadCommands(uint8_t addr,
 // =========================================================================
 
 bool WirePIOTransport::_waitDMADone(uint32_t timeoutUs) {
+    int ch = (_dmaRx >= 0 && (dma_hw->ch[_dmaRx].ctrl_trig & DMA_CH0_CTRL_TRIG_EN_BITS))
+             ? _dmaRx : _dmaTx;
+
+    // Fallback: polling (invalid channel or IRQ not worth it)
+    if (ch < 0 || ch >= 12) {
+        uint64_t dl = WIREPIO_TIMEOUT_US(timeoutUs);
+        while (dma_channel_is_busy(_dmaTx)) {
+            if (WIREPIO_TIME_REACHED(dl)) { dma_channel_abort(_dmaTx); dma_channel_abort(_dmaRx); return false; }
+        }
+        if (_dmaRx >= 0) {
+            while (dma_channel_is_busy(_dmaRx)) {
+                if (WIREPIO_TIME_REACHED(dl)) { dma_channel_abort(_dmaRx); return false; }
+            }
+        }
+        return true;
+    }
+
+    if (!dma_channel_is_busy(ch)) return true;
+
+    // DMA IRQ + WFI: arm IRQ, sleep, check flag on wake
+    _dmaDone = false;
+    _wpt_irq_inst[ch] = this;
+    dma_channel_set_irq0_enabled(ch, true);
+    irq_set_exclusive_handler(DMA_IRQ_0, _wpt_dma_handler);
+    irq_set_enabled(DMA_IRQ_0, true);
+
     uint64_t deadline = WIREPIO_TIMEOUT_US(timeoutUs);
-    while (dma_channel_is_busy(_dmaTx)) {
+    while (!_dmaDone && dma_channel_is_busy(ch)) {
         if (WIREPIO_TIME_REACHED(deadline)) {
+            _wpt_irq_inst[ch] = nullptr;
+            dma_channel_set_irq0_enabled(ch, false);
             dma_channel_abort(_dmaTx);
-            dma_channel_abort(_dmaRx);
+            if (_dmaRx >= 0) dma_channel_abort(_dmaRx);
             return false;
         }
+        __wfi();
     }
-    if (_dmaRx >= 0) {
-        while (dma_channel_is_busy(_dmaRx)) {
-            if (WIREPIO_TIME_REACHED(deadline)) {
-                dma_channel_abort(_dmaRx);
-                return false;
-            }
+
+    dma_channel_set_irq0_enabled(ch, false);
+    _wpt_irq_inst[ch] = nullptr;
+
+    if (ch == _dmaRx && _dmaTx >= 0) {
+        while (dma_channel_is_busy(_dmaTx)) {
+            if (WIREPIO_TIME_REACHED(deadline)) { dma_channel_abort(_dmaTx); return false; }
         }
     }
     return true;

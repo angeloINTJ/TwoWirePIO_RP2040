@@ -270,6 +270,20 @@ size_t WirePIO::burstRead(uint8_t address, uint8_t reg, uint8_t *data, size_t le
     return _transport->burstRead(address, reg, data, len);
 }
 
+size_t WirePIO::writeThenRead(uint8_t address,
+                               const uint8_t *wdata, size_t wlen,
+                               uint8_t *rdata, size_t rlen, bool stopBit) {
+    if (!_running || _slave || !_transport->isPIOActive()) return 0;
+    if (wlen == 0 && rlen == 0) return 0;
+    if (wlen > 0 && rlen > 0)
+        return _transport->pioWriteThenRead(address, wdata, wlen, rdata, rlen);
+    if (rlen > 0)
+        return _transport->pioRead(address, rdata, rlen, stopBit);
+    if (wlen > 0)
+        return _transport->pioWrite(address, wdata, wlen, stopBit) == WIREPIO_SUCCESS ? wlen : 0;
+    return 0;
+}
+
 size_t WirePIO::requestFrom(uint8_t address, size_t quantity) {
     return requestFrom(address, quantity, true);
 }
@@ -480,6 +494,73 @@ int WirePIO::scan() {
         _transport->beginGPIO();
     }
     return _transport->scan();
+}
+
+int WirePIO::scan(uint8_t *buf, size_t max) {
+    if (!_running || _slave || !buf || !max) return -1;
+    if (!_transport->isInitialized()) _transport->beginGPIO();
+
+    int found = 0;
+    for (int addr = 1; addr < 0x78 && found < (int)max; addr++) {
+        if (_transport->probeAddress((uint8_t)addr) == WIREPIO_SUCCESS) {
+            buf[found++] = (uint8_t)addr;
+        }
+    }
+    return found;
+}
+
+bool WirePIO::busRecovery() {
+    if (!_transport->isInitialized()) _transport->beginGPIO();
+
+    uint8_t sd = _transport->getSDA();
+    uint8_t sc = _transport->getSCL();
+
+    // Switch to GPIO mode for direct pin control
+    gpio_set_function(sd, GPIO_FUNC_SIO);
+    gpio_set_dir(sd, GPIO_IN);
+    gpio_pull_up(sd);
+    gpio_set_function(sc, GPIO_FUNC_SIO);
+    gpio_set_dir(sc, GPIO_OUT);
+
+    // If SDA is already HIGH, bus is free
+    if (gpio_get(sd)) {
+        gpio_put(sc, 1);
+        return true;
+    }
+
+    // Generate up to 9 SCL pulses to free stuck SDA
+    bool recovered = false;
+    for (int i = 0; i < 9; i++) {
+        gpio_put(sc, 0);
+        delayMicroseconds(5);
+        gpio_put(sc, 1);
+        delayMicroseconds(5);
+        if (gpio_get(sd)) {
+            recovered = true;
+            break;
+        }
+    }
+
+    // Send STOP condition if recovered
+    if (recovered) {
+        gpio_set_dir(sd, GPIO_OUT);
+        gpio_put(sd, 0);
+        delayMicroseconds(5);
+        gpio_put(sc, 1);
+        delayMicroseconds(5);
+        gpio_set_dir(sd, GPIO_IN);
+        delayMicroseconds(5);
+    }
+
+    // Restore transport GPIO state
+    gpio_set_function(sd, GPIO_FUNC_SIO);
+    gpio_set_dir(sd, GPIO_IN);
+    gpio_pull_up(sd);
+    gpio_set_function(sc, GPIO_FUNC_SIO);
+    gpio_set_dir(sc, GPIO_OUT);
+    gpio_put(sc, 1);
+
+    return recovered;
 }
 
 // =========================================================================

@@ -276,6 +276,11 @@ public:
      * @return Number of bytes read (0 on error).
      */
     size_t burstRead(uint8_t address, uint8_t reg, uint8_t *data, size_t len);
+
+    size_t writeThenRead(uint8_t address,
+                         const uint8_t *wdata, size_t wlen,
+                         uint8_t *rdata, size_t rlen,
+                         bool stopBit = true);
 #else
     size_t requestFrom(uint8_t address, size_t quantity, bool stopBit = true);
     size_t requestFrom(uint8_t address, size_t quantity);
@@ -413,6 +418,8 @@ public:
      * @return Number of devices found.
      */
     int scan();
+    int scan(uint8_t *buf, size_t max);
+    bool busRecovery();
 
 private:
     pin_size_t _sda, _scl;                  ///< GPIO pin numbers.

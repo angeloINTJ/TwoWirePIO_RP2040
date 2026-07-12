@@ -13,6 +13,7 @@
  * Output: Serial Monitor at 115200 baud.
  */
 
+#ifdef WIREPIO_STANDALONE_TEST
 #include <Arduino.h>
 #include "WirePIO.h"
 
@@ -119,3 +120,5 @@ void loop() {
     }
     delay(1000);
 }
+
+#endif // WIREPIO_STANDALONE_TEST

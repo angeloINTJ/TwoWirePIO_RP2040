@@ -203,7 +203,6 @@ int WirePIOTransport::scan() {
     if (!_gpioReady) return 0;
 
 #ifdef WIREPIO_PLATFORM_ARDUINO
-    Serial.println("I2C Scan:");
 #else
     printf("I2C Scan:\n");
 #endif
@@ -215,9 +214,8 @@ int WirePIOTransport::scan() {
         _gpioStop();
         if (ack) {
 #ifdef WIREPIO_PLATFORM_ARDUINO
-            Serial.print("0x");
-            Serial.print(addr, HEX);
-            Serial.print(" ");
+
+
 #else
             printf("0x%02X ", addr);
 #endif
@@ -226,9 +224,8 @@ int WirePIOTransport::scan() {
     }
 
 #ifdef WIREPIO_PLATFORM_ARDUINO
-    Serial.print("(");
-    Serial.print(found);
-    Serial.println(" devices)");
+
+
 #else
     printf("(%d devices)\n", found);
 #endif
@@ -357,14 +354,16 @@ void WirePIOTransport::_buildWriteCommands(uint8_t addr, const uint8_t *data,
 
 void WirePIOTransport::_buildReadCommands(uint8_t addr, size_t len, bool stop) {
     _cmdCount = 0;
-    // Word 0: START + address (read direction)
+    // Word 0: START + address (read direction) — uses write path, STOP at bit 10
     _cmdBuf[_cmdCount++] = mk_cmd(true, false, false, (uint8_t)((addr << 1) | 1));
-    // Words 1..N-1: read bytes with ACK (no STOP)
+    // Read data words: the PIO read path consumes Y(1)+X(1)+pindirs(1)=3 bits
+    // before check_stop reads STOP. Shift STOP from bit 10 → bit 3.
     for (size_t i = 0; i < len - 1; i++) {
-        _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);
+        _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);  // STOP already 0
     }
-    // Last word: read + NACK + optional STOP
-    _cmdBuf[_cmdCount++] = mk_cmd(false, true, stop, 0xFF);
+    uint16_t last = mk_cmd(false, true, stop, 0xFF);
+    if (stop) { last = (last & ~(1u << 10)) | (1u << 3); }  // move STOP bit
+    _cmdBuf[_cmdCount++] = last;
 }
 
 void WirePIOTransport::_buildWriteThenReadCommands(uint8_t addr,
@@ -382,12 +381,14 @@ void WirePIOTransport::_buildWriteThenReadCommands(uint8_t addr,
     // Read phase
     // Repeated START + address (read direction)
     _cmdBuf[_cmdCount++] = mk_cmd(true, false, false, (uint8_t)((addr << 1) | 1));
-    // Read bytes
+    // Read bytes (PIO read path: STOP must be at bit 3, not bit 10)
     for (size_t i = 0; i < rlen - 1; i++) {
         _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);
     }
-    // Last read byte + STOP
-    _cmdBuf[_cmdCount++] = mk_cmd(false, true, true, 0xFF);
+    // Last read byte + STOP (shifted to bit 3 for read path alignment)
+    uint16_t last_rd = mk_cmd(false, true, true, 0xFF);
+    last_rd = (last_rd & ~(1u << 10)) | (1u << 3);  // move STOP bit 10→3
+    _cmdBuf[_cmdCount++] = last_rd;
 }
 
 // =========================================================================
@@ -494,7 +495,7 @@ size_t WirePIOTransport::pioRead(uint8_t addr, uint8_t *data, size_t len, bool s
 
     // RX buffer: +1 for address echo (first byte is discarded)
     // Use a local buffer to avoid corrupting _cmdBuf during read
-    uint32_t rxbuf[WIREPIO_BUFFER_SIZE + 1];
+    uint32_t rxbuf[WIREPIO_BUFFER_SIZE];
 
     // ─── Configure TX DMA ─────────────────────────────────────────
     dma_channel_abort(_dmaTx);
@@ -513,7 +514,7 @@ size_t WirePIOTransport::pioRead(uint8_t addr, uint8_t *data, size_t len, bool s
     dma_channel_hw_t *rx_hw = &dma_hw->ch[_dmaRx];
     rx_hw->read_addr  = (uint32_t)&_pio->rxf[_sm];
     rx_hw->write_addr = (uint32_t)rxbuf;
-    rx_hw->transfer_count = len + 1;  // +1 to capture address echo
+    rx_hw->transfer_count = len;
     rx_hw->ctrl_trig = DMA_CH0_CTRL_TRIG_DATA_SIZE_BITS |
                        DMA_CH0_CTRL_TRIG_INCR_WRITE_BITS |
                        (pio_get_dreq(_pio, _sm, false) << DMA_CH0_CTRL_TRIG_TREQ_SEL_LSB);
@@ -551,7 +552,7 @@ size_t WirePIOTransport::pioRead(uint8_t addr, uint8_t *data, size_t len, bool s
     // PIO ISR with shift_in_right=false: MSB at ISR[7], LSB at ISR[0].
     // Byte is already in correct I2C order — no bit reversal needed.
     for (size_t i = 0; i < len; i++) {
-        data[i] = rxbuf[i + 1] & 0xFF;
+        data[i] = rxbuf[i] & 0xFF;
     }
     return len;
 }
@@ -565,7 +566,7 @@ size_t WirePIOTransport::pioWriteThenRead(uint8_t addr,
     _buildWriteThenReadCommands(addr, wdata, wlen, rlen);
 
     // RX buffer: +1 for address echo from the read-address phase
-    uint32_t rxbuf[WIREPIO_BUFFER_SIZE + 1];
+    uint32_t rxbuf[WIREPIO_BUFFER_SIZE];
 
     // ─── Configure TX DMA ─────────────────────────────────────────
     dma_channel_abort(_dmaTx);
@@ -584,7 +585,7 @@ size_t WirePIOTransport::pioWriteThenRead(uint8_t addr,
     dma_channel_hw_t *rx_hw = &dma_hw->ch[_dmaRx];
     rx_hw->read_addr  = (uint32_t)&_pio->rxf[_sm];
     rx_hw->write_addr = (uint32_t)rxbuf;
-    rx_hw->transfer_count = rlen + 1;  // +1 for address echo
+    rx_hw->transfer_count = rlen;
     rx_hw->ctrl_trig = DMA_CH0_CTRL_TRIG_DATA_SIZE_BITS |
                        DMA_CH0_CTRL_TRIG_INCR_WRITE_BITS |
                        (pio_get_dreq(_pio, _sm, false) << DMA_CH0_CTRL_TRIG_TREQ_SEL_LSB);
@@ -620,7 +621,7 @@ size_t WirePIOTransport::pioWriteThenRead(uint8_t addr,
 
     // Skip first RX word (address echo)
     for (size_t i = 0; i < rlen; i++) {
-        rdata[i] = rxbuf[i + 1] & 0xFF;
+        rdata[i] = rxbuf[i] & 0xFF;
     }
     return rlen;
 }

@@ -1,8 +1,9 @@
-# WirePIO
+# TwoWirePIO_RP2040
 
-> TwoWire-compatible I2C implementation using PIO + DMA for the RP2040.
+> TwoWire-compatible I2C using PIO+DMA for RP2040. Unlimited buses on any GPIO pins.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-compatible-orange.svg)](https://platformio.org/)
 [![Platform: RP2040](https://img.shields.io/badge/Platform-RP2040-green.svg)](https://www.raspberrypi.com/products/rp2040/)
 
 ## Overview
@@ -11,20 +12,20 @@ The RP2040 has only two hardware I2C controllers (I2C0 and I2C1). In large
 projects this quickly becomes a limitation — many I2C devices have only two
 possible addresses, requiring multiplexers like the TCA9548A.
 
-**WirePIO** eliminates this limitation using the RP2040's PIO (Programmable I/O)
+**TwoWirePIO_RP2040** eliminates this limitation using the RP2040's PIO (Programmable I/O)
 to create as many I2C buses as needed, with an API fully compatible with
 Arduino's `Wire.h` (TwoWire).
 
 ## Features
 
-- **Unlimited I2C buses** — any GPIO pin pair, independent operation
+- **Unlimited I2C buses** — up to 4 independent buses on any GPIO pins
+- **PIO+DMA burstRead** — zero-CPU 8-byte burst transfers via DMA
 - **Drop-in Wire replacement** — `WirePIO bus(2,3); bus.begin();`
-- **PIO + DMA** — zero CPU overhead during transfers
 - **GPIO bit-bang fallback** — works even without PIO resources
 - **Master + Slave** modes
 - **Async DMA transfers** with callback
 - **Timeout + NACK detection**
-- **Compatible** with Adafruit_BME280, SSD1306, U8g2, RTClib, and more
+- **Compatible** with BMx280PIO_RP2040, Adafruit_BME280, SSD1306, U8g2, and more
 
 ## Requirements
 
@@ -35,8 +36,8 @@ Arduino's `Wire.h` (TwoWire).
   - Then: Tools → Board → Boards Manager → search "Raspberry Pi Pico/RP2040"
 - Arduino IDE 1.8.10+ or PlatformIO
 
-> **Note:** This library uses the RP2040 PIO hardware and is NOT
-> compatible with the Arduino Mbed OS RP2040 core.
+> **Note:** This library uses RP2040 PIO hardware. Only compatible with
+> the **earlephilhower/arduino-pico** core, not the Arduino Mbed OS core.
 
 ## Quick Start
 
@@ -64,17 +65,19 @@ void setup() {
 
 ## Multiple Buses
 
-```cpp
-WirePIO bus1(2, 3);   // Sensors
-WirePIO bus2(4, 5);   // Display
-WirePIO bus3(6, 7);   // ADC
-WirePIO bus4(8, 9);   // GPIO expander
-WirePIO bus5(10, 11); // EEPROM
+Each WirePIO bus uses 2 PIO state machines (TX + RX). The RP2040 has
+8 SMs total across pio0 and pio1, supporting up to 4 independent buses.
 
-// Each bus operates independently
+```cpp
+WirePIO bus1(2, 3);   // Sensors on pio0
+WirePIO bus2(4, 5);   // Display on pio0
+WirePIO bus3(6, 7);   // ADC on pio1
+WirePIO bus4(8, 9);   // EEPROM on pio1
+
 bus1.begin();
 bus2.begin();
-// ...
+bus3.begin();
+bus4.begin();
 ```
 
 ## API
@@ -101,6 +104,7 @@ WirePIO implements the full `TwoWire` / `HardwareI2C` interface:
 | `onReceive(callback)` | Slave receive callback |
 | `onRequest(callback)` | Slave request callback |
 | `scan()` | Scan bus and print addresses |
+| `burstRead(addr, reg, buf, len)` | PIO+DMA burst read (≤8 bytes) |
 
 ### Async API
 
@@ -194,7 +198,7 @@ lib_deps = angeloINTJ/TwoWirePIO_RP2040 @ ^1.3.2
 
 ```cmake
 add_subdirectory(path/to/TwoWirePIO_RP2040)
-target_link_libraries(your_target WirePIO)
+target_link_libraries(your_target TwoWirePIO_RP2040)
 ```
 
 ## License

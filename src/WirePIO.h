@@ -419,6 +419,8 @@ public:
      */
     int scan();
     int scan(uint8_t *buf, size_t max);
+    void getStats(uint32_t &nacks, uint32_t &timeouts, uint32_t &reads, uint32_t &writes);
+    void resetStats();
     bool busRecovery();
 
 private:

@@ -509,6 +509,14 @@ int WirePIO::scan(uint8_t *buf, size_t max) {
     return found;
 }
 
+void WirePIO::getStats(uint32_t &nacks, uint32_t &timeouts,
+                         uint32_t &reads, uint32_t &writes) {
+    if (!_transport) { nacks=timeouts=reads=writes=0; return; }
+    nacks=_transport->nackCount; timeouts=_transport->timeoutCount;
+    reads=_transport->readCount; writes=_transport->writeCount;
+}
+void WirePIO::resetStats() { if (_transport) _transport->resetStats(); }
+
 bool WirePIO::busRecovery() {
     if (!_transport->isInitialized()) _transport->beginGPIO();
 

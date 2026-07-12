@@ -177,6 +177,13 @@ size_t pioWriteThenRead(uint8_t addr,
     uint32_t getFrequency() const { return _freq; }
     /// @}
 
+    // ─── Error counters ──────────────────────────────────────────────
+    uint32_t nackCount = 0;
+    uint32_t timeoutCount = 0;
+    uint32_t readCount = 0;
+    uint32_t writeCount = 0;
+    void resetStats() { nackCount = timeoutCount = readCount = writeCount = 0; }
+
 private:
     uint8_t  _sda, _scl;                    ///< GPIO pin numbers.
     uint32_t _freq;                         ///< I2C bus frequency in Hz.
@@ -187,6 +194,7 @@ private:
 
     int      _dmaTx;                        ///< TX DMA channel (commands → PIO).
     int      _dmaRx;                        ///< RX DMA channel (PIO → buffer).
+
 
     /// Command buffer for TX DMA (built before each transaction).
     uint32_t _cmdBuf[WIREPIO_MAX_CMD_WORDS];

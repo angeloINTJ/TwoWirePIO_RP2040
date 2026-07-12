@@ -276,7 +276,7 @@ bool WirePIOTransport::beginPIO(PIO pio) {
     sm_config_set_sideset_pins(&c, _scl);
     sm_config_set_in_shift(&c, false, true, 8);  // MSB first, autopush at 8
 
-    float div = (float)clock_get_hz(clk_sys) / ((float)_freq * 17.0f);
+    float div = (float)clock_get_hz(clk_sys) / ((float)_freq * 20.0f);
     sm_config_set_clkdiv(&c, div);
 
     pio_sm_init(_pio, _sm, _offset, &c);
@@ -361,9 +361,7 @@ void WirePIOTransport::_buildReadCommands(uint8_t addr, size_t len, bool stop) {
     for (size_t i = 0; i < len - 1; i++) {
         _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);  // STOP already 0
     }
-    uint16_t last = mk_cmd(false, true, stop, 0xFF);
-    if (stop) { last = (last & ~(1u << 10)) | (1u << 3); }
-    _cmdBuf[_cmdCount++] = last;
+    _cmdBuf[_cmdCount++] = mk_cmd(false, true, stop, 0xFF);
 }
 
 void WirePIOTransport::_buildWriteThenReadCommands(uint8_t addr,
@@ -386,9 +384,7 @@ void WirePIOTransport::_buildWriteThenReadCommands(uint8_t addr,
         _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);
     }
     // Last read byte + STOP (shifted to bit 3 for read path alignment)
-        uint16_t last_rd = mk_cmd(false, true, true, 0xFF);
-    last_rd = (last_rd & ~(1u << 10)) | (1u << 3);
-    _cmdBuf[_cmdCount++] = last_rd;
+    _cmdBuf[_cmdCount++] = mk_cmd(false, true, true, 0xFF);
 }
 
 // =========================================================================
@@ -464,8 +460,7 @@ uint8_t WirePIOTransport::pioWrite(uint8_t addr, const uint8_t *data,
     gpio_set_function(_scl, _pio == pio0 ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
     gpio_pull_up(_sda);
 
-    // ─── Start PIO SM, then enable DMA — block interrupts ──────────
-    __asm volatile("cpsid i" ::: "memory");
+    // ─── Start PIO SM, then enable DMA ────────────────────────────
     pio_sm_clear_fifos(_pio, _sm);
     pio_sm_restart(_pio, _sm);
     pio_sm_set_enabled(_pio, _sm, true);
@@ -475,7 +470,6 @@ uint8_t WirePIOTransport::pioWrite(uint8_t addr, const uint8_t *data,
     // ─── Wait for completion ──────────────────────────────────────
     bool ok = _waitDMADone(WIREPIO_DEFAULT_TIMEOUT_US);
     pio_sm_set_enabled(_pio, _sm, false);
-    __asm volatile("cpsie i" ::: "memory");
 
     // Check for NACK (PIO raises IRQ 0 and halts on unexpected NACK)
     bool nacked = pio_interrupt_get(_pio, _sm);
@@ -604,18 +598,16 @@ size_t WirePIOTransport::burstRead(uint8_t addr, uint8_t reg,
     gpio_set_function(_scl, _pio == pio0 ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
     gpio_pull_up(_sda);
 
-    // Start PIO, then DMA — block interrupts for deterministic timing
-    __asm volatile("cpsid i" ::: "memory");
+    // Start PIO, then DMA
     pio_sm_clear_fifos(_pio, _sm);
     pio_sm_restart(_pio, _sm);
     pio_sm_set_enabled(_pio, _sm, true);
     tx_hw->ctrl_trig |= DMA_CH0_CTRL_TRIG_EN_BITS;
     rx_hw->ctrl_trig |= DMA_CH0_CTRL_TRIG_EN_BITS;
 
-    // Wait — DMA runs autonomously, CPU just polls
+    // Wait
     bool ok = _waitDMADone(WIREPIO_DEFAULT_TIMEOUT_US);
     pio_sm_set_enabled(_pio, _sm, false);
-    __asm volatile("cpsie i" ::: "memory");
 
     bool nacked = pio_interrupt_get(_pio, _sm);
     pio_interrupt_clear(_pio, _sm);

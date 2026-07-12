@@ -177,8 +177,6 @@ size_t pioWriteThenRead(uint8_t addr,
     uint32_t getFrequency() const { return _freq; }
     /// @}
 
-    volatile bool _dmaDone;  ///< DMA completion flag (public for IRQ handler).
-
 private:
     uint8_t  _sda, _scl;                    ///< GPIO pin numbers.
     uint32_t _freq;                         ///< I2C bus frequency in Hz.

@@ -13,7 +13,7 @@
 // ---------- //
 
 #define i2c_master_wrap_target 0
-#define i2c_master_wrap 30
+#define i2c_master_wrap 31
 #define i2c_master_pio_version 0
 
 static const uint16_t i2c_master_program_instructions[] = {
@@ -24,7 +24,7 @@ static const uint16_t i2c_master_program_instructions[] = {
     0x1066, //  3: jmp    !y, 6           side 0
     0xf881, //  4: set    pindirs, 1      side 1
     0xf180, //  5: set    pindirs, 0      side 0 [1]
-    0x1031, //  6: jmp    !x, 17          side 0
+    0x1032, //  6: jmp    !x, 18          side 0
     0x7081, //  7: out    pindirs, 1      side 0
     0xf027, //  8: set    x, 7            side 0
     0xbe42, //  9: nop                    side 1 [6]
@@ -34,28 +34,29 @@ static const uint16_t i2c_master_program_instructions[] = {
     0xf081, // 13: set    pindirs, 1      side 0
     0xbe42, // 14: nop                    side 1 [6]
     0xf180, // 15: set    pindirs, 0      side 0 [1]
-    0x1019, // 16: jmp    25              side 0
-    0xf027, // 17: set    x, 7            side 0
-    0x7181, // 18: out    pindirs, 1      side 0 [1]
-    0xbe42, // 19: nop                    side 1 [6]
-    0xb742, // 20: nop                    side 0 [7]
-    0x1052, // 21: jmp    x--, 18         side 0
-    0x7181, // 22: out    pindirs, 1      side 0 [1]
-    0xbe42, // 23: nop                    side 1 [6]
-    0xb742, // 24: nop                    side 0 [7]
-    0x7041, // 25: out    y, 1            side 0
-    0x107e, // 26: jmp    !y, 30          side 0
-    0xf181, // 27: set    pindirs, 1      side 0 [1]
-    0xbe42, // 28: nop                    side 1 [6]
-    0xf980, // 29: set    pindirs, 0      side 1 [1]
-    0xb742, // 30: nop                    side 0 [7]
+    0x7067, // 16: out    null, 7         side 0
+    0x101a, // 17: jmp    26              side 0
+    0xf027, // 18: set    x, 7            side 0
+    0x7181, // 19: out    pindirs, 1      side 0 [1]
+    0xbe42, // 20: nop                    side 1 [6]
+    0xb742, // 21: nop                    side 0 [7]
+    0x1053, // 22: jmp    x--, 19         side 0
+    0x7181, // 23: out    pindirs, 1      side 0 [1]
+    0xbe42, // 24: nop                    side 1 [6]
+    0xb742, // 25: nop                    side 0 [7]
+    0x7041, // 26: out    y, 1            side 0
+    0x107f, // 27: jmp    !y, 31          side 0
+    0xf181, // 28: set    pindirs, 1      side 0 [1]
+    0xbe42, // 29: nop                    side 1 [6]
+    0xf980, // 30: set    pindirs, 0      side 1 [1]
+    0xb742, // 31: nop                    side 0 [7]
             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program i2c_master_program = {
     .instructions = i2c_master_program_instructions,
-    .length = 31,
+    .length = 32,
     .origin = -1,
     .pio_version = i2c_master_pio_version,
 #if PICO_PIO_VERSION > 0

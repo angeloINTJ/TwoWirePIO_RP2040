@@ -60,7 +60,8 @@ read_bit:
     set pindirs, 1      side 0     ;13: drive SDA LOW, SCL stays LOW (setup)
     nop                 side 1 [6] ;14: SCL HIGH (ACK clock — sensor samples SDA=0)
     set pindirs, 0      side 0 [1] ;15: release SDA, SCL LOW
-    jmp check_stop      side 0     ;16:
+    out null, 7         side 0     ;16: skip unused data bits (align STOP flag)
+    jmp check_stop      side 0     ;16a:
 
     ; ===================================================================
     ; WRITE BYTE + ACK check (9th SCL — value not read, ISR clean)
@@ -108,7 +109,7 @@ static inline void i2c_master_program_init(PIO pio, uint sm, uint offset,
     sm_config_set_sideset_pins(&c, pin_scl);
     sm_config_set_in_shift(&c, false, true, 8);
 
-    float div = (float)clock_get_hz(clk_sys) / ((float)freq * 17.0f);
+    float div = (float)clock_get_hz(clk_sys) / ((float)freq * 20.0f);
     sm_config_set_clkdiv(&c, div);
 
     pio_sm_init(pio, sm, offset, &c);

@@ -1,6 +1,6 @@
 {
   "name": "WirePIO",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "TwoWire-compatible I2C implementation using PIO+DMA on the RP2040. Create unlimited I2C buses on any GPIO pin pair — no multiplexers needed. Drop-in replacement for Wire.h.",
   "keywords": [
     "I2C",

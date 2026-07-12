@@ -33,8 +33,5 @@
     "WirePIOTransport.h",
     "WirePIOSlave.h",
     "WirePIO_config.h"
-  ],
-  "dependencies": {
-    "earlephilhower/arduino-pico": "^4.0.0"
-  }
+  ]
 }

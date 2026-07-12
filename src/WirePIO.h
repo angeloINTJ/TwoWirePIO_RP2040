@@ -37,6 +37,15 @@ class WirePIOSlave;
 #define WIREPIO_HAS_END             1
 #define WIREPIO_HAS_BUFFER_SIZE     1
 #define WIREPIO_HAS_TIMEOUT         1
+#define WIREPIO_HAS_BURST_READ      1
+#define WIREPIO_HAS_SET_PIO         1
+#define WIREPIO_HAS_CLOCK_STRETCH   1
+
+/// @name Bus Initialization Modes
+/// @{
+#define WIREPIO_MODE_DEFAULT        0   ///< PIO+DMA with GPIO fallback
+#define WIREPIO_MODE_GPIO_ONLY      1   ///< GPIO bit-bang only (no PIO/DMA)
+/// @}
 
 /**
  * @brief TwoWire-compatible I2C bus using PIO+DMA on the RP2040.
@@ -128,6 +137,15 @@ public:
      * @param pio PIO instance (pio0 or pio1).
      */
     void begin(PIO pio);
+
+    /**
+     * @brief Initialize the bus with specific mode.
+     *
+     * @param mode WIREPIO_MODE_DEFAULT (PIO+DMA) or WIREPIO_MODE_GPIO_ONLY.
+     *             GPIO-only saves 1 PIO SM + 2 DMA channels for resource-
+     *             constrained setups (e.g. Pico W with WiFi + multiple buses).
+     */
+    void begin(int mode);
 
     /**
      * @brief Initialize the bus as I2C slave with the given address.

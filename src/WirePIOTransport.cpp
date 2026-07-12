@@ -276,7 +276,7 @@ bool WirePIOTransport::beginPIO(PIO pio) {
     sm_config_set_sideset_pins(&c, _scl);
     sm_config_set_in_shift(&c, false, true, 8);  // MSB first, autopush at 8
 
-    float div = (float)clock_get_hz(clk_sys) / ((float)_freq * 20.0f);
+    float div = (float)clock_get_hz(clk_sys) / ((float)_freq * 17.0f);
     sm_config_set_clkdiv(&c, div);
 
     pio_sm_init(_pio, _sm, _offset, &c);
@@ -361,7 +361,9 @@ void WirePIOTransport::_buildReadCommands(uint8_t addr, size_t len, bool stop) {
     for (size_t i = 0; i < len - 1; i++) {
         _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);  // STOP already 0
     }
-    _cmdBuf[_cmdCount++] = mk_cmd(false, true, stop, 0xFF);
+    uint16_t last = mk_cmd(false, true, stop, 0xFF);
+    if (stop) { last = (last & ~(1u << 10)) | (1u << 3); }
+    _cmdBuf[_cmdCount++] = last;
 }
 
 void WirePIOTransport::_buildWriteThenReadCommands(uint8_t addr,
@@ -384,7 +386,9 @@ void WirePIOTransport::_buildWriteThenReadCommands(uint8_t addr,
         _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);
     }
     // Last read byte + STOP (shifted to bit 3 for read path alignment)
-    _cmdBuf[_cmdCount++] = mk_cmd(false, true, true, 0xFF);
+        uint16_t last_rd = mk_cmd(false, true, true, 0xFF);
+    last_rd = (last_rd & ~(1u << 10)) | (1u << 3);
+    _cmdBuf[_cmdCount++] = last_rd;
 }
 
 // =========================================================================

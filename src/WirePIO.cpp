@@ -102,6 +102,26 @@ void WirePIO::begin(PIO pio) {
     begin();
 }
 
+void WirePIO::begin(int mode) {
+    if (_running) return;
+
+    if (_transport) { delete _transport; }
+    _transport = new WirePIOTransport(_sda, _scl, _freq);
+
+    if (!_transport->beginGPIO()) return;
+
+    if (mode == WIREPIO_MODE_DEFAULT) {
+        // PIO+DMA with GPIO fallback
+        if (!_transport->beginPIO(_pioBlock)) {
+            // PIO failed — GPIO bit-bang fallback still works
+        }
+    }
+    // WIREPIO_MODE_GPIO_ONLY: skip PIO init entirely
+
+    _slave = false;
+    _running = true;
+}
+
 void WirePIO::begin(uint8_t address) {
     if (_running) end();
 

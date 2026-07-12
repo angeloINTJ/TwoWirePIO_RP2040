@@ -39,7 +39,7 @@ class WirePIOSlave;
 #define WIREPIO_HAS_TIMEOUT         1
 #define WIREPIO_HAS_BURST_READ      1
 #define WIREPIO_HAS_SET_PIO         1
-#define WIREPIO_HAS_CLOCK_STRETCH   1
+#define WIREPIO_HAS_CLOCK_STRETCH   0   ///< Not yet implemented
 
 /// @name Bus Initialization Modes
 /// @{

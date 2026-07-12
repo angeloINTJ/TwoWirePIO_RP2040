@@ -13,12 +13,13 @@
  * Output: Serial Monitor at 115200 baud.
  */
 
+#include <Arduino.h>
 #include <WirePIO.h>
 
 #define SDA_PIN 2
 #define SCL_PIN 3
 
-WirePIO bus(SDA_PIN, SCL_PIN, 100000);
+WirePIO bus(SDA_PIN, SCL_PIN, WIREPIO_FREQ_STANDARD);
 
 void setup() {
     Serial.begin(115200);

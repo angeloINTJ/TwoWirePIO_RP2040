@@ -8,7 +8,6 @@
  *
  * Based on PIO_I2C.cpp from BMx280PIO_RP2040, extended with:
  * - NACK detection via PIO IRQ 0
- * - Clock stretching (wait 1 pin in PIO)
  * - Timeout on all blocking operations
  * - Variable-length transactions (up to buffer size)
  *
@@ -203,6 +202,7 @@ int WirePIOTransport::scan() {
     if (!_gpioReady) return 0;
 
 #ifdef WIREPIO_PLATFORM_ARDUINO
+    Serial.println("I2C Scan:");
 #else
     printf("I2C Scan:\n");
 #endif
@@ -214,8 +214,9 @@ int WirePIOTransport::scan() {
         _gpioStop();
         if (ack) {
 #ifdef WIREPIO_PLATFORM_ARDUINO
-
-
+            Serial.print("0x");
+            Serial.print(addr, HEX);
+            Serial.print(" ");
 #else
             printf("0x%02X ", addr);
 #endif
@@ -224,8 +225,9 @@ int WirePIOTransport::scan() {
     }
 
 #ifdef WIREPIO_PLATFORM_ARDUINO
-
-
+    Serial.print("(");
+    Serial.print(found);
+    Serial.println(" devices)");
 #else
     printf("(%d devices)\n", found);
 #endif

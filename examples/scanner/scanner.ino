@@ -16,7 +16,7 @@
  */
 
 #include <Arduino.h>
-#include "WirePIO.h"
+#include <WirePIO.h>
 
 #define SDA_PIN 2
 #define SCL_PIN 3

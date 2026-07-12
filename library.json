@@ -22,7 +22,7 @@
     {
       "name": "Angelo Moises Alves",
       "url": "https://github.com/angeloINTJ",
-      "maintainer": "Angelo Moises Alves"
+      "maintainer": true
     }
   ],
   "license": "MIT",

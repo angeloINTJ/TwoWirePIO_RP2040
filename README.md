@@ -87,7 +87,9 @@ WirePIO implements the full `TwoWire` / `HardwareI2C` interface:
 | `begin(uint8_t addr)` | Initialize as I2C slave |
 | `end()` | Shut down and release resources |
 | `setClock(freqHz)` | Set bus frequency (100000 or 400000) |
+| `getClock()` | Get current bus frequency |
 | `setSDA(pin)` / `setSCL(pin)` | Change pins (before begin()) |
+| `setPIO(pio)` | Set PIO block (pio0/pio1, before begin()) |
 | `setBufferSize(size)` | Set TX/RX buffer size (default 256) |
 | `beginTransmission(addr)` | Start a master write transaction |
 | `write(byte)` / `write(buf, len)` | Append data to TX buffer |
@@ -153,7 +155,7 @@ WirePIO (TwoWire-compatible API)
 ## Performance
 
 - SCL frequency: ~65–87 kHz (conservative, spec-compliant timing)
-- PIO clock divider: `sys_clk / (freq * 13)` — 13 PIO cycles per I2C bit
+- PIO clock divider: `sys_clk / (freq * 20)` — 20 PIO cycles per I2C bit
 - DMA burst: 2 DMA channels per bus (TX → PIO, PIO → RX)
 - CPU usage during transfer: 0% (DMA handles everything)
 
@@ -163,7 +165,7 @@ WirePIO (TwoWire-compatible API)
 - Max 8 PIO state machines per RP2040 → up to 8 I2C buses simultaneously
   (or fewer if other PIO programs are loaded)
 - Slave mode uses hardware I2C peripheral (requires I2C-capable pins)
-- No clock stretching in PIO master (deferred to v1.1 — saves 3 instructions)
+- No clock stretching in PIO master
 
 ## Installation
 
@@ -185,7 +187,7 @@ lib_deps = WirePIO
 Or with a specific version:
 
 ```ini
-lib_deps = angeloINTJ/TwoWirePIO_RP2040 @ ^1.3.1
+lib_deps = angeloINTJ/TwoWirePIO_RP2040 @ ^1.3.2
 ```
 
 ### Pico SDK (CMake)

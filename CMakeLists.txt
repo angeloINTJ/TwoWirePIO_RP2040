@@ -44,17 +44,6 @@ target_link_libraries(WirePIO PUBLIC
 # ─── Examples (standalone build only) ─────────────────────────────────
 
 if (NOT TARGET _pico_sdk_inclusion_marker)
-    # I2C Scanner example
-    add_executable(wirepio_scanner
-        examples/pico_sdk/scanner.c
-    )
-    target_link_libraries(wirepio_scanner WirePIO)
-    pico_add_extra_outputs(wirepio_scanner)
-
-    # Loopback test (master-slave on two pin pairs)
-    add_executable(wirepio_loopback
-        examples/pico_sdk/loopback.c
-    )
-    target_link_libraries(wirepio_loopback WirePIO)
-    pico_add_extra_outputs(wirepio_loopback)
+    message(STATUS "WirePIO: examples are in the Arduino examples/ folder. "
+            "For Pico SDK, use as subdirectory with add_subdirectory().")
 endif()

@@ -12,7 +12,7 @@
  *     CYW43 WiFi on Pico W, etc.)
  *
  * On Pico W, WiFi occupies pio1. Use pio0 for WirePIO buses:
- *   WirePIO bus(2, 3, 100000, pio0);
+ *   WirePIO bus(2, 3, WIREPIO_FREQ_STANDARD, pio0);
  *
  * Wiring:
  *   Bus 1 (pins 2,3): Connect BME280 at 0x76
@@ -24,7 +24,7 @@
  */
 
 #include <Arduino.h>
-#include "WirePIO.h"
+#include <WirePIO.h>
 
 // Bus 1: Environmental sensors (pio0)
 WirePIO bus1(2, 3);

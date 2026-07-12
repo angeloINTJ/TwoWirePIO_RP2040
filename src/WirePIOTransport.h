@@ -150,22 +150,9 @@ public:
      * @param rlen    Read length.
      * @return Number of bytes read (0 on error).
      */
-        /**
-     * @brief Combined write-then-read in a single PIO+DMA burst.
-     *
-     * Unlike pioRead (standalone read), this sends the register address
-     * in the same PIO burst as the read, matching the proven burstRead
-     * pattern from BMx280PIO_RP2040's PIO_I2C.
-     *
-     * @param addr   7-bit I2C address.
-     * @param reg    Register address to write before reading.
-     * @param data   Receive buffer.
-     * @param len    Number of bytes to read.
-     * @return Number of bytes read (0 on error).
-     */
     size_t burstRead(uint8_t addr, uint8_t reg, uint8_t *data, size_t len);
-    
-size_t pioWriteThenRead(uint8_t addr,
+
+    size_t pioWriteThenRead(uint8_t addr,
                             const uint8_t *wdata, size_t wlen,
                             uint8_t *rdata, size_t rlen);
     /// @}

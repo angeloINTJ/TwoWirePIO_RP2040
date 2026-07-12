@@ -1,6 +1,6 @@
 /**
- * @file main.cpp
- * @brief WirePIO hardware test program for RP2040.
+ * @file hardware_test.ino
+ * @brief WirePIO hardware test example for RP2040.
  *
  * Tests the WirePIO library on actual hardware:
  * 1. I2C scanner on GPIO 2,3 (PIO+DMA)
@@ -13,9 +13,7 @@
  * Output: Serial Monitor at 115200 baud.
  */
 
-#ifdef WIREPIO_STANDALONE_TEST
-#include <Arduino.h>
-#include "WirePIO.h"
+#include <WirePIO.h>
 
 #define SDA_PIN 2
 #define SCL_PIN 3
@@ -120,5 +118,3 @@ void loop() {
     }
     delay(1000);
 }
-
-#endif // WIREPIO_STANDALONE_TEST

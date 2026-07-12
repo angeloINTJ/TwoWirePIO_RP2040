@@ -26,6 +26,18 @@ Arduino's `Wire.h` (TwoWire).
 - **Timeout + NACK detection**
 - **Compatible** with Adafruit_BME280, SSD1306, U8g2, RTClib, and more
 
+## Requirements
+
+- **Raspberry Pi Pico** or any **RP2040-based board**
+- **Earle Philhower's arduino-pico core** (install via Boards Manager)
+  - In Arduino IDE: File → Preferences → Additional Boards Manager URLs:
+    `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`
+  - Then: Tools → Board → Boards Manager → search "Raspberry Pi Pico/RP2040"
+- Arduino IDE 1.8.10+ or PlatformIO
+
+> **Note:** This library uses the RP2040 PIO hardware and is NOT
+> compatible with the Arduino Mbed OS RP2040 core.
+
 ## Quick Start
 
 ```cpp
@@ -155,17 +167,26 @@ WirePIO (TwoWire-compatible API)
 
 ## Installation
 
+### Arduino IDE
+
+1. Open **Library Manager** (Tools → Manage Libraries...)
+2. Search for **"WirePIO"**
+3. Click **Install**
+
+> **Manual install:** Download this repository as ZIP and use
+> Sketch → Include Library → Add .ZIP Library...
+
 ### PlatformIO
 
 ```ini
 lib_deps = WirePIO
 ```
 
-### Arduino IDE
+Or with a specific version:
 
-1. Open Library Manager
-2. Search "WirePIO"
-3. Install
+```ini
+lib_deps = angeloINTJ/TwoWirePIO_RP2040 @ ^1.3.1
+```
 
 ### Pico SDK (CMake)
 

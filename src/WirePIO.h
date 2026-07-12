@@ -242,7 +242,22 @@ public:
      */
 #ifdef WIREPIO_PLATFORM_ARDUINO
     size_t requestFrom(uint8_t address, size_t quantity, bool stopBit) override;
-    size_t requestFrom(uint8_t address, size_t quantity) override;
+        size_t requestFrom(uint8_t address, size_t quantity) override;
+
+    /**
+     * @brief Combined write-register-then-read in a single PIO+DMA burst.
+     *
+     * Sends a register address followed by a read in one PIO operation,
+     * without releasing the bus between write and read. Uses the proven
+     * burstRead pattern for BMP280/BME280 register access.
+     *
+     * @param address 7-bit I2C address.
+     * @param reg     Register address to write.
+     * @param data    Buffer for received bytes.
+     * @param len     Number of bytes to read (max 8).
+     * @return Number of bytes read (0 on error).
+     */
+    size_t burstRead(uint8_t address, uint8_t reg, uint8_t *data, size_t len);
 #else
     size_t requestFrom(uint8_t address, size_t quantity, bool stopBit = true);
     size_t requestFrom(uint8_t address, size_t quantity);

@@ -52,13 +52,13 @@ read_byte:
     out pindirs, 1      side 0     ; 7: release SDA (consumes bit 2)
     set x, 7            side 0     ; 8: loop counter
 read_bit:
-    nop                 side 1 [1] ; 9: SCL HIGH
+    nop                 side 1 [6] ; 9: SCL HIGH (+6 delay)
     in pins, 1          side 1     ;10: sample SDA → ISR (autopush at 8)
     nop                 side 0 [7] ;11: SCL LOW
     jmp x--, read_bit   side 0     ;12: loop 8 times
     ; Send ACK (SDA LOW during 9th SCL) — setup SDA before SCL rises
     set pindirs, 1      side 0     ;13: drive SDA LOW, SCL stays LOW (setup)
-    nop                 side 1 [1] ;14: SCL HIGH (ACK clock — sensor samples SDA=0)
+    nop                 side 1 [6] ;14: SCL HIGH (ACK clock — sensor samples SDA=0)
     set pindirs, 0      side 0 [1] ;15: release SDA, SCL LOW
     jmp check_stop      side 0     ;16:
 
@@ -69,12 +69,12 @@ write_byte:
     set x, 7            side 0     ;16: loop counter
 write_bit:
     out pindirs, 1      side 0 [1] ;17: data bit → SDA
-    nop                 side 1 [1] ;18: SCL HIGH
+    nop                 side 1 [6] ;18: SCL HIGH (+6 delay)
     nop                 side 0 [7] ;19: SCL LOW
     jmp x--, write_bit  side 0     ;20: loop 8 times
     ; ACK clock pulse (sensor needs 9th SCL, value not read)
     out pindirs, 1      side 0 [1] ;21: release SDA
-    nop                 side 1 [1] ;22: SCL HIGH (9th pulse)
+    nop                 side 1 [6] ;22: SCL HIGH (9th pulse)
     nop                 side 0 [7] ;23: SCL LOW (ISR stays clean!)
 
     ; ===================================================================
@@ -85,7 +85,7 @@ check_stop:
     jmp !y, done        side 0     ;25: no STOP → done
     ; STOP: SDA LOW → SCL HIGH → SDA HIGH
     set pindirs, 1      side 0 [1] ;26: drive SDA LOW
-    nop                 side 1 [1] ;27: SCL HIGH
+    nop                 side 1 [6] ;27: SCL HIGH (+6 delay)
     set pindirs, 0      side 1 [1] ;28: release SDA while SCL HIGH = STOP
 
 done:
@@ -108,7 +108,7 @@ static inline void i2c_master_program_init(PIO pio, uint sm, uint offset,
     sm_config_set_sideset_pins(&c, pin_scl);
     sm_config_set_in_shift(&c, false, true, 8);
 
-    float div = (float)clock_get_hz(clk_sys) / ((float)freq * 13.0f);
+    float div = (float)clock_get_hz(clk_sys) / ((float)freq * 17.0f);
     sm_config_set_clkdiv(&c, div);
 
     pio_sm_init(pio, sm, offset, &c);

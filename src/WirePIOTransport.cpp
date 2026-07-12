@@ -276,7 +276,7 @@ bool WirePIOTransport::beginPIO(PIO pio) {
     sm_config_set_sideset_pins(&c, _scl);
     sm_config_set_in_shift(&c, false, true, 8);  // MSB first, autopush at 8
 
-    float div = (float)clock_get_hz(clk_sys) / ((float)_freq * 13.0f);
+    float div = (float)clock_get_hz(clk_sys) / ((float)_freq * 17.0f);
     sm_config_set_clkdiv(&c, div);
 
     pio_sm_init(_pio, _sm, _offset, &c);
@@ -554,6 +554,73 @@ size_t WirePIOTransport::pioRead(uint8_t addr, uint8_t *data, size_t len, bool s
     for (size_t i = 0; i < len; i++) {
         data[i] = rxbuf[i] & 0xFF;
     }
+    return len;
+}
+
+// Combined write-register-then-read in a single PIO+DMA burst.
+// Uses the proven command sequence from BMx280PIO_RP2040's PIO_I2C.
+size_t WirePIOTransport::burstRead(uint8_t addr, uint8_t reg,
+                                    uint8_t *data, size_t len) {
+    if (!_pioReady || _dmaTx < 0 || _dmaRx < 0) return 0;
+    if (len == 0 || len > 8) return 0;
+
+    // Build commands: write_addr + write_reg + read_addr + read_data
+    _cmdCount = 0;
+    _cmdBuf[_cmdCount++] = mk_cmd(true,  false, false, (uint8_t)(addr << 1));
+    _cmdBuf[_cmdCount++] = mk_cmd(false, false, false, reg);
+    _cmdBuf[_cmdCount++] = mk_cmd(true,  false, false, (uint8_t)((addr << 1) | 1));
+    for (size_t i = 0; i < len - 1; i++)
+        _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);
+    _cmdBuf[_cmdCount++] = mk_cmd(false, true, true, 0xFF);
+
+    uint32_t rxbuf[8] = {0};
+
+    // TX DMA: commands → PIO TX FIFO
+    dma_channel_abort(_dmaTx);
+    dma_channel_hw_t *tx_hw = &dma_hw->ch[_dmaTx];
+    tx_hw->read_addr  = (uint32_t)_cmdBuf;
+    tx_hw->write_addr = (uint32_t)&_pio->txf[_sm];
+    tx_hw->transfer_count = _cmdCount;
+    tx_hw->ctrl_trig = DMA_CH0_CTRL_TRIG_DATA_SIZE_BITS |
+                       DMA_CH0_CTRL_TRIG_INCR_READ_BITS |
+                       (pio_get_dreq(_pio, _sm, true) << DMA_CH0_CTRL_TRIG_TREQ_SEL_LSB);
+
+    // RX DMA: PIO RX FIFO → rxbuf
+    dma_channel_abort(_dmaRx);
+    dma_channel_hw_t *rx_hw = &dma_hw->ch[_dmaRx];
+    rx_hw->read_addr  = (uint32_t)&_pio->rxf[_sm];
+    rx_hw->write_addr = (uint32_t)rxbuf;
+    rx_hw->transfer_count = len;  // Only read data bytes (no address echo)
+    rx_hw->ctrl_trig = DMA_CH0_CTRL_TRIG_DATA_SIZE_BITS |
+                       DMA_CH0_CTRL_TRIG_INCR_WRITE_BITS |
+                       (pio_get_dreq(_pio, _sm, false) << DMA_CH0_CTRL_TRIG_TREQ_SEL_LSB);
+
+    pio_interrupt_clear(_pio, _sm);
+
+    // Switch GPIO to PIO
+    gpio_set_function(_sda, _pio == pio0 ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
+    gpio_set_function(_scl, _pio == pio0 ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
+    gpio_pull_up(_sda);
+
+    // Start PIO, then DMA
+    pio_sm_clear_fifos(_pio, _sm);
+    pio_sm_restart(_pio, _sm);
+    pio_sm_set_enabled(_pio, _sm, true);
+    tx_hw->ctrl_trig |= DMA_CH0_CTRL_TRIG_EN_BITS;
+    rx_hw->ctrl_trig |= DMA_CH0_CTRL_TRIG_EN_BITS;
+
+    // Wait
+    bool ok = _waitDMADone(WIREPIO_DEFAULT_TIMEOUT_US);
+    pio_sm_set_enabled(_pio, _sm, false);
+
+    bool nacked = pio_interrupt_get(_pio, _sm);
+    pio_interrupt_clear(_pio, _sm);
+
+    _pioToGPIO();
+
+    if (!ok || nacked) return 0;
+
+    for (size_t i = 0; i < len; i++) data[i] = rxbuf[i] & 0xFF;
     return len;
 }
 

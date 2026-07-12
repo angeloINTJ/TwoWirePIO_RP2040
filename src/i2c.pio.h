@@ -27,26 +27,26 @@ static const uint16_t i2c_master_program_instructions[] = {
     0x1031, //  6: jmp    !x, 17          side 0
     0x7081, //  7: out    pindirs, 1      side 0
     0xf027, //  8: set    x, 7            side 0
-    0xb942, //  9: nop                    side 1 [1]
+    0xbe42, //  9: nop                    side 1 [6]
     0x5801, // 10: in     pins, 1         side 1
     0xb742, // 11: nop                    side 0 [7]
     0x1049, // 12: jmp    x--, 9          side 0
     0xf081, // 13: set    pindirs, 1      side 0
-    0xb942, // 14: nop                    side 1 [1]
+    0xbe42, // 14: nop                    side 1 [6]
     0xf180, // 15: set    pindirs, 0      side 0 [1]
     0x1019, // 16: jmp    25              side 0
     0xf027, // 17: set    x, 7            side 0
     0x7181, // 18: out    pindirs, 1      side 0 [1]
-    0xb942, // 19: nop                    side 1 [1]
+    0xbe42, // 19: nop                    side 1 [6]
     0xb742, // 20: nop                    side 0 [7]
     0x1052, // 21: jmp    x--, 18         side 0
     0x7181, // 22: out    pindirs, 1      side 0 [1]
-    0xb942, // 23: nop                    side 1 [1]
+    0xbe42, // 23: nop                    side 1 [6]
     0xb742, // 24: nop                    side 0 [7]
     0x7041, // 25: out    y, 1            side 0
     0x107e, // 26: jmp    !y, 30          side 0
     0xf181, // 27: set    pindirs, 1      side 0 [1]
-    0xb942, // 28: nop                    side 1 [1]
+    0xbe42, // 28: nop                    side 1 [6]
     0xf980, // 29: set    pindirs, 0      side 1 [1]
     0xb742, // 30: nop                    side 0 [7]
             //     .wrap
@@ -81,7 +81,7 @@ static inline void i2c_master_program_init(PIO pio, uint sm, uint offset,
     sm_config_set_in_pins(&c, pin_sda);
     sm_config_set_sideset_pins(&c, pin_scl);
     sm_config_set_in_shift(&c, false, true, 8);
-    float div = (float)clock_get_hz(clk_sys) / ((float)freq * 13.0f);
+    float div = (float)clock_get_hz(clk_sys) / ((float)freq * 17.0f);
     sm_config_set_clkdiv(&c, div);
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_pindirs_with_mask(pio, sm,

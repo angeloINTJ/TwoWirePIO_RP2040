@@ -245,6 +245,11 @@ size_t WirePIO::requestFrom(uint8_t address, size_t quantity, bool stopBit) {
     return received;
 }
 
+size_t WirePIO::burstRead(uint8_t address, uint8_t reg, uint8_t *data, size_t len) {
+    if (!_running || _slave || !_transport->isPIOActive()) return 0;
+    return _transport->burstRead(address, reg, data, len);
+}
+
 size_t WirePIO::requestFrom(uint8_t address, size_t quantity) {
     return requestFrom(address, quantity, true);
 }

@@ -176,7 +176,7 @@ WirePIO (TwoWire-compatible API)
 ### Arduino IDE
 
 1. Open **Library Manager** (Tools → Manage Libraries...)
-2. Search for **"TwoWirePIO_RP2040"**
+2. Search for **"WirePIO"**
 3. Click **Install**
 
 > **Manual install:** Download this repository as ZIP and use

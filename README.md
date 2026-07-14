@@ -201,6 +201,25 @@ add_subdirectory(path/to/TwoWirePIO_RP2040)
 target_link_libraries(your_target TwoWirePIO_RP2040)
 ```
 
+## Changelog
+
+### v1.3.5 (2026-07-14)
+
+- **I2C clock divider correction** — Fix PIO clock divider formula (`*20.0f` → `*18.0f`) for accurate I2C timing. Previous value produced slightly slower SCL than specified.
+
+### v1.3.4 (2026-07-12)
+
+- Fix library name consistency (`TwoWirePIO_RP2040` → `WirePIO`) across all metadata files
+- Complete README rewrite: fix title, API gaps, misleading examples
+- Fix author name encoding (`Angelo Moises Alves` → `Ângelo Moisés Alves`)
+
+### v1.3.2 (2026-07-12)
+
+- Prepare for Arduino Library Manager submission
+- Add error statistics counters to WirePIO
+- Restore PIO transport to v1.2.0 for BMx280PIO compatibility
+- Revert unstable DMA IRQ changes
+
 ## License
 
 MIT — see [LICENSE](LICENSE)

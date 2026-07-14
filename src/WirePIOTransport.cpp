@@ -279,7 +279,7 @@ bool WirePIOTransport::beginPIO(PIO pio) {
     sm_config_set_sideset_pins(&c, _scl);
     sm_config_set_in_shift(&c, false, true, 8);  // MSB first, autopush at 8
 
-    float div = (float)clock_get_hz(clk_sys) / ((float)_freq * 20.0f);
+    float div = (float)clock_get_hz(clk_sys) / ((float)_freq * 18.0f);  // 18 PIO cycles per I2C bit (write path)
     sm_config_set_clkdiv(&c, div);
 
     pio_sm_init(_pio, _sm, _offset, &c);

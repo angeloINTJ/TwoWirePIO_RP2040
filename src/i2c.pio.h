@@ -24,8 +24,8 @@ static const uint16_t i2c_master_program_instructions[] = {
     0x1066, //  3: jmp    !y, 6           side 0
     0xf881, //  4: set    pindirs, 1      side 1
     0xf180, //  5: set    pindirs, 0      side 0 [1]
-    0x1033, //  6: jmp    !x, 19          side 0
-    0x7041, //  7: out    y, 1            side 0
+    0x1032, //  6: jmp    !x, 18          side 0
+    0x7081, //  7: out    pindirs, 1      side 0
     0xf027, //  8: set    x, 7            side 0
     0xbe42, //  9: nop                    side 1 [6]
     0x5801, // 10: in     pins, 1         side 1
@@ -34,22 +34,22 @@ static const uint16_t i2c_master_program_instructions[] = {
     0xf081, // 13: set    pindirs, 1      side 0
     0xbe42, // 14: nop                    side 1 [6]
     0xf180, // 15: set    pindirs, 0      side 0 [1]
-    0x1060, // 16: jmp    !y, 0           side 0
-    0xf181, // 17: set    pindirs, 1      side 0 [1]
-    0xbe42, // 18: nop                    side 1 [6]
-    0xf027, // 19: set    x, 7            side 0
-    0x7181, // 20: out    pindirs, 1      side 0 [1]
-    0xbe42, // 21: nop                    side 1 [6]
-    0xb742, // 22: nop                    side 0 [7]
-    0x1054, // 23: jmp    x--, 20         side 0
-    0x7181, // 24: out    pindirs, 1      side 0 [1]
-    0x7d41, // 25: out    y, 1            side 1 [5]
-    0x18dd, // 26: jmp    pin, 29         side 1
-    0xb642, // 27: nop                    side 0 [6]
-    0x101e, // 28: jmp    30              side 0
-    0xd000, // 29: irq    nowait 0        side 0
-    0x1060, // 30: jmp    !y, 0           side 0
-    0xfe81, // 31: set    pindirs, 1      side 1 [6]
+    0x7067, // 16: out    null, 7         side 0
+    0x101a, // 17: jmp    26              side 0
+    0xf027, // 18: set    x, 7            side 0
+    0x7181, // 19: out    pindirs, 1      side 0 [1]
+    0xbe42, // 20: nop                    side 1 [6]
+    0xb742, // 21: nop                    side 0 [7]
+    0x1053, // 22: jmp    x--, 19         side 0
+    0x7181, // 23: out    pindirs, 1      side 0 [1]
+    0xbe42, // 24: nop                    side 1 [6]
+    0xb742, // 25: nop                    side 0 [7]
+    0x7041, // 26: out    y, 1            side 0
+    0x107f, // 27: jmp    !y, 31          side 0
+    0xf181, // 28: set    pindirs, 1      side 0 [1]
+    0xbe42, // 29: nop                    side 1 [6]
+    0xf980, // 30: set    pindirs, 0      side 1 [1]
+    0xb742, // 31: nop                    side 0 [7]
             //     .wrap
 };
 
@@ -80,10 +80,9 @@ static inline void i2c_master_program_init(PIO pio, uint sm, uint offset,
     sm_config_set_out_pins(&c, pin_sda, 1);
     sm_config_set_set_pins(&c, pin_sda, 1);
     sm_config_set_in_pins(&c, pin_sda);
-    sm_config_set_jmp_pin(&c, pin_sda);    // for NACK detection
     sm_config_set_sideset_pins(&c, pin_scl);
     sm_config_set_in_shift(&c, false, true, 8);
-    float div = (float)clock_get_hz(clk_sys) / ((float)freq * 20.0f);
+    float div = (float)clock_get_hz(clk_sys) / ((float)freq * 17.0f);
     sm_config_set_clkdiv(&c, div);
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_pindirs_with_mask(pio, sm,

@@ -276,7 +276,6 @@ bool WirePIOTransport::beginPIO(PIO pio) {
     sm_config_set_out_pins(&c, _sda, 1);
     sm_config_set_set_pins(&c, _sda, 1);
     sm_config_set_in_pins(&c, _sda);
-    sm_config_set_jmp_pin(&c, _sda);             // for NACK detection (jmp pin)
     sm_config_set_sideset_pins(&c, _scl);
     sm_config_set_in_shift(&c, false, true, 8);  // MSB first, autopush at 8
 
@@ -369,15 +368,14 @@ void WirePIOTransport::_buildWriteCommands(uint8_t addr, const uint8_t *data,
 
 void WirePIOTransport::_buildReadCommands(uint8_t addr, size_t len, bool stop) {
     _cmdCount = 0;
-    // Word 0: START + address (read direction) — write path
+    // Word 0: START + address (read direction) — uses write path, STOP at bit 10
     _cmdBuf[_cmdCount++] = mk_cmd(true, false, false, (uint8_t)((addr << 1) | 1));
-    // Read commands: STOP at bit 2 (PIO v2 read path reads it via out y,1)
+    // Read data words: the PIO read path consumes Y(1)+X(1)+pindirs(1)=3 bits
+    // before check_stop reads STOP. Shift STOP from bit 10 → bit 3.
     for (size_t i = 0; i < len - 1; i++) {
-        _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);
+        _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);  // STOP already 0
     }
-    _cmdBuf[_cmdCount] = mk_cmd(false, true, false, 0xFF);
-    if (stop) _cmdBuf[_cmdCount] |= (1u << 2);  // STOP at bit 2
-    _cmdCount++;
+    _cmdBuf[_cmdCount++] = mk_cmd(false, true, stop, 0xFF);
 }
 
 void WirePIOTransport::_buildWriteThenReadCommands(uint8_t addr,
@@ -385,18 +383,22 @@ void WirePIOTransport::_buildWriteThenReadCommands(uint8_t addr,
                                                     size_t rlen) {
     _cmdCount = 0;
     // Write phase
+    // Word 0: START + address (write direction)
     _cmdBuf[_cmdCount++] = mk_cmd(true, false, false, (uint8_t)(addr << 1));
+    // Words 1..wlen: write data bytes
     for (size_t i = 0; i < wlen; i++) {
+        // Last write byte: no STOP, repeated START on next command
         _cmdBuf[_cmdCount++] = mk_cmd(false, false, false, wdata[i]);
     }
-    // Read phase: STOP at bit 2 (PIO v2)
+    // Read phase
+    // Repeated START + address (read direction)
     _cmdBuf[_cmdCount++] = mk_cmd(true, false, false, (uint8_t)((addr << 1) | 1));
+    // Read bytes (PIO read path: STOP must be at bit 3, not bit 10)
     for (size_t i = 0; i < rlen - 1; i++) {
         _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);
     }
-    _cmdBuf[_cmdCount] = mk_cmd(false, true, false, 0xFF);
-    _cmdBuf[_cmdCount] |= (1u << 2);  // STOP at bit 2 for last read byte
-    _cmdCount++;
+    // Last read byte + STOP (shifted to bit 3 for read path alignment)
+    _cmdBuf[_cmdCount++] = mk_cmd(false, true, true, 0xFF);
 }
 
 // =========================================================================
@@ -573,16 +575,13 @@ size_t WirePIOTransport::burstRead(uint8_t addr, uint8_t reg,
     if (len == 0 || len > 8) return 0;
 
     // Build commands: write_addr + write_reg + read_addr + read_data
-    // Read commands: STOP at bit 2 (PIO v2)
     _cmdCount = 0;
     _cmdBuf[_cmdCount++] = mk_cmd(true,  false, false, (uint8_t)(addr << 1));
     _cmdBuf[_cmdCount++] = mk_cmd(false, false, false, reg);
     _cmdBuf[_cmdCount++] = mk_cmd(true,  false, false, (uint8_t)((addr << 1) | 1));
     for (size_t i = 0; i < len - 1; i++)
         _cmdBuf[_cmdCount++] = mk_cmd(false, true, false, 0xFF);
-    _cmdBuf[_cmdCount] = mk_cmd(false, true, false, 0xFF);
-    _cmdBuf[_cmdCount] |= (1u << 2);  // STOP at bit 2 for last read byte
-    _cmdCount++;
+    _cmdBuf[_cmdCount++] = mk_cmd(false, true, true, 0xFF);
 
     uint32_t rxbuf[8] = {0};
 

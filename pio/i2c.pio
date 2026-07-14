@@ -1,27 +1,13 @@
 ;
 ; @file i2c.pio
-; @brief I2C Master Bit-Bang State Machine for RP2040 PIO (31 instructions).
+; @brief I2C Master with NACK detection — 32 instructions.
 ;
-; Part of WirePIO — TwoWire-compatible I2C using PIO+DMA.
-; Ported directly from BMx280PIO_RP2040, verified on hardware.
+; v2: STOP@bit2 for read commands (eliminates out null+jmp), NACK via jmp pin+irq0.
 ;
-; Pin mapping:
-;   OUT pin 0       = SDA direction (1 = drive low, 0 = release/Hi-Z)
-;   Side-set pin 0  = SCL level (0 = low, 1 = high)
-;   SET pin 0       = SDA direction (set pindirs for START/ACK)
-;   IN pin 0        = SDA input (read data and ACK bits)
-;
-; Command word (16-bit, LSB-first shift from OSR):
-;   Bit  0    = START flag  (1 = generate START before this byte)
-;   Bit  1    = READ flag   (1 = read from slave, 0 = write)
-;   Bits 9:2  = Data byte for WRITE (~rev8(data))
-;   Bit  10   = STOP flag   (1 = generate STOP after this byte)
-;
-; Key design decisions:
-; - Flags extracted via out y/x BEFORE any SCL edge (zero glitch for START=0)
-; - START generated conditionally with set pindirs + set pindirs,0 cleanup
-; - ACK pulse after each read byte (SDA setup before SCL rise, 3 instructions)
-; - ACK read removed from WRITE path (ISR stays clean for next command)
+; Command word (16-bit):
+;   Bit 0 = START, Bit 1 = READ
+;   Write: Bits 9:2 = ~rev8(data), Bit 11 = STOP
+;   Read:  Bit 2 = STOP (bits 9:3 don't-care)
 ;
 ; @author angeloINTJ
 ; @license MIT
@@ -29,68 +15,56 @@
 .program i2c_master
 .side_set 1 opt
 
-    ; ─── Prologue: extract flags, then conditionally generate START ────
-    pull block          side 0     ; 0: wait for command, SCL LOW
-
-    out y, 1            side 0     ; 1: Y = START (OSR bit 0)
-    out x, 1            side 0     ; 2: X = READ  (OSR bit 1)
-
-    jmp !y, branch      side 0     ; 3: START=0 → branch
-
-    ; Generate START: SDA LOW while SCL HIGH
-    set pindirs, 1      side 1     ; 4: SCL↑ + SET drives SDA↓ = START
-    set pindirs, 0      side 0 [1] ; 5: release SET, SCL↓
-
-    ; ─── Branch on READ flag ───────────────────────────────────────────
+    ; ─── Prologue (0-6) ──────────────────────────────────────────────────
+    pull block          side 0     ; 0
+    out y, 1            side 0     ; 1  Y=START
+    out x, 1            side 0     ; 2  X=READ
+    jmp !y, branch      side 0     ; 3  no START → skip
+    set pindirs, 1      side 1     ; 4  SDA=LOW, SCL=HIGH = START
+    set pindirs, 0      side 0 [1] ; 5  release SDA, SCL LOW
 branch:
-    jmp !x, write_byte  side 0     ; 6: READ=0 → write
+    jmp !x, write_byte  side 0     ; 6  READ=0 → write
 
-    ; ===================================================================
-    ; READ BYTE + ACK (9th SCL pulse)
-    ; ===================================================================
+    ; =====================================================================
+    ; READ PATH (7-18): STOP@bit2, saved to Y, checked after ACK
+    ; =====================================================================
 read_byte:
-    out pindirs, 1      side 0     ; 7: release SDA (consumes bit 2)
-    set x, 7            side 0     ; 8: loop counter
+    out y, 1            side 0     ; 7  Y=STOP (bit 2 consumed)
+    set x, 7            side 0     ; 8  loop counter
 read_bit:
-    nop                 side 1 [6] ; 9: SCL HIGH (+6 delay)
-    in pins, 1          side 1     ;10: sample SDA → ISR (autopush at 8)
-    nop                 side 0 [7] ;11: SCL LOW
-    jmp x--, read_bit   side 0     ;12: loop 8 times
-    ; Send ACK (SDA LOW during 9th SCL) — setup SDA before SCL rises
-    set pindirs, 1      side 0     ;13: drive SDA LOW, SCL stays LOW (setup)
-    nop                 side 1 [6] ;14: SCL HIGH (ACK clock — sensor samples SDA=0)
-    set pindirs, 0      side 0 [1] ;15: release SDA, SCL LOW
-    out null, 7         side 0     ;16: skip unused data bits (align STOP flag)
-    jmp check_stop      side 0     ;16a:
+    nop                 side 1 [6] ; 9  SCL HIGH
+    in pins, 1          side 1     ;10  sample SDA → ISR
+    nop                 side 0 [7] ;11  SCL LOW
+    jmp x--, read_bit   side 0     ;12  loop 8x
+    set pindirs, 1      side 0     ;13  drive SDA LOW (ACK)
+    nop                 side 1 [6] ;14  SCL HIGH (ACK clock)
+    set pindirs, 0      side 0 [1] ;15  release SDA, SCL LOW
+    jmp !y, 0           side 0     ;16  STOP=0 → done
+    set pindirs, 1      side 0 [1] ;17  STOP: SDA LOW
+    nop                 side 1 [6] ;18  STOP: SCL HIGH
+    ; wrap → 0 (SDA stays LOW, next START handles it)
 
-    ; ===================================================================
-    ; WRITE BYTE + ACK check (9th SCL — value not read, ISR clean)
-    ; ===================================================================
+    ; =====================================================================
+    ; WRITE PATH (19-31): +NACK detection via jmp pin + irq0
+    ; =====================================================================
 write_byte:
-    set x, 7            side 0     ;16: loop counter
+    set x, 7            side 0     ;19  loop counter
 write_bit:
-    out pindirs, 1      side 0 [1] ;17: data bit → SDA
-    nop                 side 1 [6] ;18: SCL HIGH (+6 delay)
-    nop                 side 0 [7] ;19: SCL LOW
-    jmp x--, write_bit  side 0     ;20: loop 8 times
-    ; ACK clock pulse (sensor needs 9th SCL, value not read)
-    out pindirs, 1      side 0 [1] ;21: release SDA
-    nop                 side 1 [6] ;22: SCL HIGH (9th pulse)
-    nop                 side 0 [7] ;23: SCL LOW (ISR stays clean!)
-
-    ; ===================================================================
-    ; CHECK STOP / GENERATE STOP
-    ; ===================================================================
-check_stop:
-    out y, 1            side 0     ;24: Y = STOP flag
-    jmp !y, done        side 0     ;25: no STOP → done
-    ; STOP: SDA LOW → SCL HIGH → SDA HIGH
-    set pindirs, 1      side 0 [1] ;26: drive SDA LOW
-    nop                 side 1 [6] ;27: SCL HIGH (+6 delay)
-    set pindirs, 0      side 1 [1] ;28: release SDA while SCL HIGH = STOP
-
-done:
-    nop                 side 0 [7] ;29: SCL LOW between commands
+    out pindirs, 1      side 0 [1] ;20  data bit → SDA
+    nop                 side 1 [6] ;21  SCL HIGH
+    nop                 side 0 [7] ;22  SCL LOW
+    jmp x--, write_bit  side 0     ;23  loop 8x
+    ; Release SDA for ACK, shift OSR to expose STOP bit
+    out pindirs, 1      side 0 [1] ;24  release SDA (OSR[0]=0→pindirs=0)
+    out y, 1            side 1 [5] ;25  Y=STOP, SCL HIGH, ACK sample window
+    jmp pin, nack_hit   side 1     ;26  SDA HIGH → NACK
+    nop                 side 0 [6] ;27  ACK: SCL LOW
+    jmp ack_skip        side 0     ;28  skip IRQ
+nack_hit:
+    irq 0               side 0     ;29  NACK! trigger IRQ0
+ack_skip:
+    jmp !y, 0           side 0     ;30  STOP=0 → done
+    set pindirs, 1      side 1 [6] ;31  STOP: SDA LOW + SCL HIGH
 .wrap
 
 % c-sdk {
@@ -106,6 +80,7 @@ static inline void i2c_master_program_init(PIO pio, uint sm, uint offset,
     sm_config_set_out_pins(&c, pin_sda, 1);
     sm_config_set_set_pins(&c, pin_sda, 1);
     sm_config_set_in_pins(&c, pin_sda);
+    sm_config_set_jmp_pin(&c, pin_sda);    // for NACK detection
     sm_config_set_sideset_pins(&c, pin_scl);
     sm_config_set_in_shift(&c, false, true, 8);
 
